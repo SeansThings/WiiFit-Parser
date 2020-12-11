@@ -58,15 +58,16 @@ do
                     ;;
                 "Date")
                     zero="00"
-                    tempHex=$(echo "$tempHex" | tr -cd '[:alnum:]' | tr '[:lower:]' '[:upper:]')
-                    tempBin=$(echo "obase=2; ibase=16; $tempHex" | bc)
-                    tempDay=$((2#${tempBin:15:5}))
-                    tempMonth=$((2#${tempBin:11:4}))
-                    tempYear=$((2#${tempBin:0:11}))
-                    tempHour=$((2#${tempBin:20:5}))
-                    tempMin=$((2#${tempBin:25:6}))
-                    tempDec="${zero:${#tempDay}:${#zero}}$tempDay-$tempMonth-$tempYear $tempHour:${zero:${#tempMin}:${#zero}}$tempMin"
-                    echo -e  "${statName[j]}\t\tDec:$tempDec\tHex:$tempHex"
+                        # tempHexNext="${profile:$((${statPos[j]}+42)):$((${statLen[j]}))}" Need to loop this so each row has Date, Weight, BMI, BalanceP
+                        tempHex=$(echo "$tempHex" | tr -cd '[:alnum:]' | tr '[:lower:]' '[:upper:]')
+                        tempBin=$(echo "obase=2; ibase=16; $tempHex" | bc)
+                        tempDay=$((2#${tempBin:15:5}))
+                        tempMonth=$((2#${tempBin:11:4}))
+                        tempYear=$((2#${tempBin:0:11}))
+                        tempHour=$((2#${tempBin:20:5}))
+                        tempMin=$((2#${tempBin:25:6}))
+                        tempDec="${zero:${#tempDay}:${#zero}}$tempDay-$tempMonth-$tempYear $tempHour:${zero:${#tempMin}:${#zero}}$tempMin"
+                        echo -e  "${statName[j]}\t\tDec:$tempDec\tHex:$tempHex"
                     ;;
                 "Weight")
                     tempDec="$(((16#$tempHex)/10)).$(((16#$tempHex)%10))kg"
