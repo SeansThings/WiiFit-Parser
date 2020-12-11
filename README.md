@@ -1,0 +1,1 @@
+A bash script to extract information from Wii Fit and Wii Fit Plus save data.
