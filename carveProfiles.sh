@@ -3,17 +3,21 @@
 #bash carveProfiles.sh
 
 saveData=FitPlus0.dat
+csvFile="output.csv"
 profileLength=37504
 offsetStart=8
 offsetEnd=$(( $offsetStart + $profileLength ))
 saveSize=`du -b $saveData | cut -f1`
 offsetEOF=$(( $saveSize - 16 ))
-statName=("Name" "Height" "DoB" "DatesWD" "Date" "Weight" "BMI" "BalanceP")
-statPos=("0" "46" "48" "192" "28978" "28986" "28990" "28994")
-statLen=("40" "2" "8" "20" "8" "4" "4" "4")
-i=0
+statName=("Name" "Height" "DoB") # "DatesWD" "Date" "Weight" "BMI" "BalanceP")
+statPos=("0" "46" "48") # "192" "28978" "28986" "28990" "28994")
+statLen=("40" "2" "8") # "20" "8" "4" "4" "4")
+dataPos="28978"
+dataLen="42"
+
 
 # Extract profiles
+i=0
 while (( $offsetEnd < $offsetEOF ))
 do
     # xxd -a -s +$offsetStart -l $profileLength $saveData > "export$i.txt" 
@@ -25,7 +29,11 @@ do
     i=$((++i))
 done
 
+# Reset csv
+echo "Name,Height,DoB,Date,Weight,BMI,Balance" > "$csvFile"
+
 # Process profiles
+i=0
 for profile in "${profiles[@]}"
 do
     # Ignore blank profiles
@@ -39,53 +47,23 @@ do
             case ${statName[j]} in
                 "Name")
                     tempDec=$( echo -ne $tempHex | xxd -p -r | tr -d '\0')
-                    echo -e  "${statName[j]}\t\tDec:$tempDec\t\tHex:$tempHex"
+                    echo -e  "${statName[j]}\t\t$tempDec"
+                    csv="$tempDec,"
                     ;;
                 "Height")
                     if (( $((16#$tempHex)) != "00" ))
                     then
                         tempDec="$((16#$tempHex))"
-                        echo -e  "${statName[j]}\t\tDec:$tempDec cm\t\tHex:$tempHex"
+                        echo -e  "${statName[j]}\t\t$tempDec cm"
+                        csv="$csv$tempDec,"
+                    else                        
+                        csv="$csv""0,"
                     fi
                     ;;
                 "DoB")
                     tempDec="${tempHex:6:2}-${tempHex:4:2}-${tempHex:0:4}"
-                    echo -e  "${statName[j]}\t\tDec:$tempDec\t\tHex:$tempHex"
-                    ;;
-                "DatesWD")
-                    tempDec="FIX ME"            
-                    echo -e  "${statName[j]}\t\tDec:$tempDec\t\tHex:$tempHex"
-                    ;;
-                "Date")
-                    zero="00"
-                        # tempHexNext="${profile:$((${statPos[j]}+42)):$((${statLen[j]}))}" Need to loop this so each row has Date, Weight, BMI, BalanceP
-                        tempHex=$(echo "$tempHex" | tr -cd '[:alnum:]' | tr '[:lower:]' '[:upper:]')
-                        tempBin=$(echo "obase=2; ibase=16; $tempHex" | bc)
-                        tempDay=$((2#${tempBin:15:5}))
-                        tempMonth=$((2#${tempBin:11:4}))
-                        tempYear=$((2#${tempBin:0:11}))
-                        tempHour=$((2#${tempBin:20:5}))
-                        tempMin=$((2#${tempBin:25:6}))
-                        tempDec="${zero:${#tempDay}:${#zero}}$tempDay-$tempMonth-$tempYear $tempHour:${zero:${#tempMin}:${#zero}}$tempMin"
-                        echo -e  "${statName[j]}\t\tDec:$tempDec\tHex:$tempHex"
-                    ;;
-                "Weight")
-                    tempDec="$(((16#$tempHex)/10)).$(((16#$tempHex)%10))kg"
-                    echo -e  "${statName[j]}\t\tDec:$tempDec\t\tHex:$tempHex"
-                    ;;
-                "BMI")
-                    if (( $((16#$tempHex)) != "00" ))
-                    then
-                        tempDec="$(((16#$tempHex)/100)).$(((16#$tempHex)%100))"
-                        echo -e "${statName[j]}\t\tDec:$tempDec BMI\t\tHex:$tempHex"
-                    fi
-                    ;;
-                "BalanceP")
-                    if (( $((16#$tempHex)) != "00" ))
-                    then
-                        tempDec="$(((16#$tempHex)/10)).$(((16#$tempHex)%10))"
-                        echo -e  "${statName[j]}\tDec:$tempDec %\t\tHex:$tempHex"
-                    fi
+                    echo -e  "${statName[j]}\t\t$tempDec"
+                    csv="$csv$tempDec,"
                     ;;
                 *)
                     echo "${statName[j]} Error. Exiting"
@@ -94,6 +72,57 @@ do
             esac
             j=$((++j))
         done
-        echo "===================================================================================="
+        
+        # Process fitness data
+        chunkEmpty=false
+        k=0
+        while (( $k > -1 ))
+        do 
+            # echo $((dataPos+(dataLen*k)))
+            tempHex="${profile:$((dataPos+(dataLen*k))):${dataLen}}"
+            if [ ${tempHex:0:4} != "0000" ]
+            then                
+                # Convert date and time
+                zero="00"
+                formattedHex=$(echo "${tempHex:0:8}" | tr -cd '[:alnum:]' | tr '[:lower:]' '[:upper:]')
+                tempBin=$(echo "ibase=16; obase=2; $formattedHex" | bc)
+                tempDay=$((2#${tempBin:15:5}))
+                tempMonth=$(((2#${tempBin:11:4})+1))
+                tempYear=$((2#${tempBin:0:11}))
+                tempHour=$((2#${tempBin:20:5}))
+                tempMin=$((2#${tempBin:25:6}))
+                strBuilder="${zero:${#tempDay}:${#zero}}$tempDay-${zero:${#tempMonth}:${#zero}}$tempMonth-$tempYear ${zero:${#tempHour}:${#zero}}$tempHour:${zero:${#tempMin}:${#zero}}$tempMin"
+                csvBuilder="$csv$tempYear-${zero:${#tempMonth}:${#zero}}$tempMonth-${zero:${#tempDay}:${#zero}}$tempDay ${zero:${#tempHour}:${#zero}}$tempHour:${zero:${#tempMin}:${#zero}}$tempMin,"
+
+                # Convert weight
+                strBuilder="$strBuilder - $(((16#${tempHex:8:4})/10)).$(((16#${tempHex:8:4})%10))kg"
+                csvBuilder="$csvBuilder$(((16#${tempHex:8:4})/10)).$(((16#${tempHex:8:4})%10)),"
+                
+                # Convert BMI
+                if (( $((16#${tempHex:12:4})) != "00" ))
+                then
+                    strBuilder="$strBuilder - $(((16#${tempHex:12:4})/100)).$(((16#${tempHex:12:4})%100)) BMI"
+                    csvBuilder="$csvBuilder$(((16#${tempHex:12:4})/100)).$(((16#${tempHex:12:4})%100)),"
+                else
+                    csvBuilder="$csvBuilder""0,"
+                fi
+                
+                # Convert balance percentage (to the right)
+                if (( $((16#${tempHex:16:4})) != "00" ))
+                then
+                    strBuilder="$strBuilder - $(((16#${tempHex:16:4})/10)).$(((16#${tempHex:16:4})%10))%"
+                    csvBuilder="$csvBuilder$(((16#${tempHex:16:4})/10)).$(((16#${tempHex:16:4})%10))"
+                else
+                    csvBuilder="$csvBuilder""0"
+                fi
+
+                echo "$strBuilder"                
+                echo "$csvBuilder" >> "$csvFile"
+                k=$((++k))
+            else
+                k=-1
+            fi
+        done
+        echo "============================================="
     fi
 done
